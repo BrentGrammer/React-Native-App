@@ -1,0 +1,762 @@
+
+Starting the app for development:
+
+1) Open Android Studio
+2) Open emulator
+3) run $ npm run android in code editor terminal
+
+**If you make changes to files, you need to reload the emulator (reload in the menu or press 'rr') to see the updates.
+
+Syncing and rebuilding for troubleshooting:
+
+in android studio:
+1) Build->Clean project
+2) Build->Rebuild project
+3) File->Sync Project Files with Gradle Files
+
+
+-------
+
+VIEWS:
+
+-Main div component in react-native.  These do not scroll if content overflows viewport.  
+***You need to use ScrollView or FlatList
+
+-Dealing with blocking flexbox behavior in subcomponents wrapped in a View:
+
+(View Wrapper in subcomponent that's imported into parent with flex: 1 container)
+<View style={styles.container}>
+
+container: {
+    width: '100%', // this is set because the View wrapper in here is blocking the inherited flexbox behavior from the wrapper in the parent.
+    alignItems: "center"
+  },
+
+Getting dynamic dimendsions:
+
+// note - the dimensions calculation is left inline to dynamically calculate if device is rotated.
+      <View style={[styles.container, { width: Dimensions.get("window").width * 0.8 }]}> 
+
+
+========================
+
+IMAGE COMPONENT:
+
+-image components in react-native expect an object with a uri property to be passed in:
+
+<Image source={{ uri: "uri/path" }}
+
+TEXT:
+
+-Text must be wrapped in a <Text> component
+
+======================
+
+Navigation:
+
+-Use react-native-navigation package.
+
+-Views that are used in navigation are called screens and are in the screens folder.  They are container components.
+
+***React-native-navigation maintains a stack of pages for every app you start.
+  -The top most page on the stack is the one which is visible.
+  -You can push and pop pages to determine what is visible and where the back button goes.
+  -The builtin navigator prop on any registered screen components exposes these methods: 
+    props.navigator.push({ screen: <screen string>, title: <title>, passProps: <props to pass to pushed screen> });
+    props.navigator.pop() 
+
+----
+
+In the main app.js file you need to register the screens and pass in the store:
+
+    import { Navigation } from 'react-native-navigation';
+    import { Provider } from 'react-redux';
+    import AuthScreen from './src/screens/Auth/Auth';
+    import SharePlaceScreen from './src/screens/SharePlace/SharePlace';
+    import FindPlaceScreen from './src/screens/FindPlace/FindPlace';
+    import configureStore from './src/store/configureStore';
+
+    const store = configureStore();
+
+    /*** REGISTER SCREENS ****/
+    Navigation.registerComponent("my-app.AuthScreen", () => AuthScreen, store, Provider);
+    Navigation.registerComponent("my-app.SharePlaceScreen", () => SharePlaceScreen, store, Provider);
+    Navigation.registerComponent("my-app.FindPlaceScreen", () => FindPlaceScreen, store, Provider);
+
+    /*** START AN APP ***/
+    Navigation.startSingleScreenApp({
+      screen: {
+        screen: "my-app.AuthScreen", // <-- the unique string id assigned to the screen to use
+        title: "Login" // <-- title displays in the navbar automatically added by the library
+      }
+    });
+
+    FINALLY JUST IMPORT APP INTO THE ENTRY POINT FILE (INDEX.JS):
+    
+    import App from './App';
+
+    ===================
+
+
+  STYLING COMPONENTS:
+
+  ***You cannot add styles directly to some React-Native elements like Buttons (Touchables) 
+     You need to use a <View> component and set styles to that for styling those elements that can't accept a style prop.
+
+  **Flexbox is used automatically by React-Native View components (you don't need to add display: flex)
+
+  Ex:
+    <TouchableOpacity>
+        <View style={styles.searchButton}>
+          <Text style={styles.searchButtonText}>Find Places</Text>
+        </View>
+      </TouchableOpacity>
+
+  const styles = StyleSheet.create({
+    searchButton: {
+      borderColor: "orange",
+      borderWidth: 3,
+      borderRadius: 50,
+      padding: 20
+    }, ...
+    
+
+  CENTERING VERTICALLY AND HORIZONTALLY:
+
+      <View style={styles.container}>
+        <Text>Auth Screen</Text>
+        <Button title="Switch to Login" />
+        {/* Put inputs in separate container and set their width to 100% - you can reuse them in any container View and just set the width on the container */}
+        <View style={styles.inputContainer}>
+          <TextInput placeholder="E-mail Address" style={styles.input} />
+          <TextInput placeholder="Password" style={styles.input} />
+          <TextInput placeholder="Confirm Password" style={styles.input} />
+        </View>
+        <Button title="Submit" onPress={this.loginHandler} />
+      </View>
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  inputContainer: {
+    width: '80%'
+  },
+  input: {
+    width: '100%' // <-- inputs are now reusable since the container will determine width,
+  }
+});
+
+--
+
+MAKING REUSABLE UI COMPONENTS:
+
+
+*OVERWRITING STYLES: 
+
+-In the default component pass an array of styles into the style prop and they will overwrite each other based on order 
+(later entries overwrite previous entries).
+
+Example: style=[styles.input, props.style]
+
+const DefaultInput = props => (
+  <TextInput 
+    style={[styles.input, props.style]} 
+    {...props} // this allows you to pass any props that would normally be supported by TextInput without having to explicitly set and grab them here.
+  />
+);
+
+// this is overwritten by second element in the style array
+const styles = StyleSheet.create({
+  input: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: "#eee",
+    padding: 5,
+    margin: 8
+  }
+});
+
+================
+
+HANDLE SCREEN ROTATION:
+
+(Files to see full examples are PlaceDetail.js and AuthScreen component)
+
+-Use the Dimensions API:
+  listen to the "change" event and in the callback get access to the dimensions object which you can set state with styles 
+  to use on components.
+
+-Set separate rules in the stylesheet.create() for portrait and landscape state to take advantage of the optimizations from using styleSheet.create.  
+
+class AuthScreen extends Component {
+  state = {
+    viewMode: Dimensions.get("window").height > 500 ? "portrait" : "landscape"
+  };
+
+  constructor(props) {
+    super(props);
+
+    Dimensions.addEventListener("change", this.updateStyles);
+  }
+
+  // You need to detach the change listener to prevent memory leak and prevent errors
+  componentWillUnmount() {
+    Dimensions.removeEventListener("change", this.updateStyles);
+  }
+
+  updateStyles = (dims) => {
+    this.setState({
+      viewMode: dims.window.height > 500 ? "portrait" : "landscape"
+    });
+  }
+
+
+
+in styles = styleSheet.create() ...
+
+  landscapePasswordContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  portraitPasswordContainer: {
+    flexDirection: "column",
+    justifyContent: "flex-start"
+  },
+
+-On the components inline styles, conditionally set the style to the portrait or landscape rules based on state:
+
+  <View style={styles.inputContainer}>
+    <DefaultInput placeholder="E-mail Address" style={styles.input} />
+    <View 
+      style={ 
+        this.state.viewMode === "portrait" 
+          ? styles.portraitPasswordContainer 
+          : styles.landscapePasswordContainer
+      }
+    >
+
+
+See PlaceDetail.js for example of making elements stack on rotating to landscape view:
+ -Add extra View wrapper to block "row" setting of landscape container around elements you want to stack  
+  in landscape view.
+ -Set flex: {Number} tomake the blocking view wrapper take up relative space to other elements (more, less or equal)
+
+    ==================
+
+    STYLING NAVIGATION TABS AND BUTTONS:
+
+Docs: 
+https://github.com/wix/react-native-navigation/blob/v1/docs/styling-the-navigator.md
+https://github.com/wix/react-native-navigation/blob/v1/docs/top-level-api.md
+
+
+-Use the tabsStyle property in the config object passed into Navigation.startTabBasedApp (on startMainTabs.js for example).
+
+***FOR ANDROID: You need to do this in appStyle instead of tabsStyle
+
+Ex:
+  Navigation.startTabBasedApp({
+        tabs: [
+          ...other properties...
+          tabsStyle: {
+            tabBarSelectedButtonColor: "orange"
+          },
+          appStyle: {
+            tabBarSelectedButtonColor: "orange" 
+          }
+          ...
+        ] 
+  });
+
+// That sets the selected color, you can also change the color of the tab icon buttons as follows:
+
+-You can style the navigator appearance and behavior by passing a navigatorStyle object. This object can be passed when 
+the screen is originally created; can be defined per-screen by setting static navigatorStyle = {}; on the screen component; 
+
+Ex:
+
+class FindPlaceScreen extends Component {
+  
+  static navigatorStyle = {
+    navButtonColor: "orange"
+  };
+
+  constructor(props) {
+    super(props);
+
+    ======================
+
+ANIMATIONS:
+
+(See FindPlace.js component)
+
+1) import { Animated } from 'react-native';
+
+2) Set value to start from (1 used here since the CSS style being animated is Opacity):
+   state = {
+     removeAnim: new Animated.Value(1)
+   }
+     
+3) start and configure animation in handler with timing(<startValToChange>, <config obj>) method:
+  
+ placesSearchHandler = () => {
+    Animated.timing(this.state.removeAnim, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: true
+    }).start();
+  };
+
+
+Note: Animated.timing().start() can take a callback to run after the animation is completed.
+
+Ex:
+
+  Animated.timing(this.state.removeAnim, {
+    toValue: 0,
+    duration: 500,
+    useNativeDriver: true
+  }).start(() => {
+    this.setState({
+      placesLoaded: true
+    });
+    this.placesLoadedHandler(); // load another animation to start for ex. to fade in a list
+  });
+
+
+4) Wrap the component you want to animate with a special comp provided by Animated API: <Animated.View>.
+Pass in the value assigned with new Animation.Value() to the style prop to the CSS property you want to animate.
+
+      <Animated.View 
+        style={{
+          opacity: this.state.removeAnim
+        }}
+      >
+        <TouchableOpacity onPress={this.placesSearchHandler}>
+           ...content
+        </TouchableOpacity>
+      </Animated.View>
+
+-------------------
+
+-Inperpolating properties: you can change the values used for the start and end value of the animation by using
+Animated.Value(<Value>).intperolate({ inputRange: <Original Range> outputRange: <Range to replace values with> });
+
+On the value instantiated with new Animated.Value() you can attach an .interpolate() method which you can use to change 
+the order of the values being transitioned.  
+
+-You need to provide an input range (matches the values being used (the one passed into new Animated.Value() and the one 
+used in the Animated.timing() handler toValue property) and an output range where you specify what values to replace the 
+respective input values (based on index position) with.
+
+Ex:
+
+ style={{
+          opacity: this.state.removeAnim,
+          transform: [
+            {
+              scale: this.state.removeAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [12, 1]
+              })
+            }
+          ]
+        }}
+
+// The start value is 1 in the second index of inputRange, so 1 in the second index of outputRange will be used in place 
+of the start value since that is what we want to start with.  12 will be used in place of 0, which is the toValue value 
+specified in the handler to start the animation with Animated.timing().  
+
+================
+
+FORM INPUT AND VALIDATION:
+
+See Auth.js screen
+
+-You can use a valid prop and pass it to the input component from the parent form component to conditionally render
+ styles for the input.
+
+ Ex:
+
+ -Pass touched and valid props to the input from state of parent form component:
+
+  <DefaultInput 
+    placeholder="E-mail Address" 
+    style={styles.input} 
+    value={this.state.controls.email.value}
+    onChangeText={(val) => this.updateInputState('email', val)}
+    valid={this.state.controls.email.valid}
+    touched={this.state.controls.email.touched} // prevent invalid styles before user interaction
+  />
+
+  // Update the touched and valid state with the onChangeText handler on the input
+
+
+ const styles = StyleSheet.create({
+  invalid: {
+    backgroundColor: '#f9c0c0',
+    borderColor: 'red'
+  }
+});
+
+<TextInput 
+  style={[styles.input, props.style, !props.valid && props.touched ? styles.invalid : null]}
+  underlineColorAndroid="transparent" 
+  {...props} 
+  />
+
+  ----------
+
+Auth Submit handler:
+
+1) create auth action to dispatch auth data
+2) connect auth component and map dispatch of try auth action to props
+3) onSubmit handler should dispatch action with auth data passed in
+
+-------------
+
+CONFIGURING TEXTINPUTS:
+
+https://facebook.github.io/react-native/docs/textinput
+
+-You can set things like 
+autoCorrect - good to dsiable on password fields, 
+autoCapitalize - good to disable on password fields, 
+keyboardType (allows you to specify which kind of keyboard pulls
+up)
+
+keyboardType values that work cross platform:
+default
+number-pad
+decimal-pad
+numeric
+email-address
+phone-pad
+
+secureTextEntry - used to hide the password on input
+
+Ex:
+
+  <TextInput
+    // react-native attributes you can use with TextInput to configure behavior of the keyboard:
+    autoCapitalize={false}
+    autoCorrect={false}          <--good to disable autoCorrect for password field
+    keyboardType="email-address"
+  />
+
+------
+
+TWO THINGS TO DO WHEN WORKING WITH SOFT KEYBOARD:
+
+1) PUSH VIEW OUT OF THE WAY OF KEYBOARD:
+
+  **Use the KeyboardAvoidingView component to move other elements to avoid being blocked by the keyboard when it's 
+    pulled up.
+
+    Docs: https://facebook.github.io/react-native/docs/keyboardavoidingview
+
+    Note: this component can have some strange behavior sometimes - there is a note in the docs about differeing behavior
+    on android and ios: Android and iOS both interact with this prop differently. Android may behave better when given no 
+    behavior prop at all, whereas iOS is the opposite.
+
+  -import the component and wrap your ui with it so your view elements are pushed up when the keyboard appears:
+  -define the behavior to be used to push elements out of the way - "padding" is recommended to add padding at the bottom
+   of page when keyboard in view.
+
+Ex: 
+  import { KeyboardAvoidingView } from 'react-native';
+
+  <KeyboardAvoidingView style={styles.container} behavior="padding">
+    ... your UI ...
+  </KeyboardAvoidingView>
+
+Note on using with ScrollView:
+  The problem just is the ScrollView . Your content won't scroll up automatically - but you can do that manually. 
+  So the input can be made visible.
+  Once you close the keyboard though, the padding is likely to stick around.
+  That's because ScrollView  + KeyboardAvoidingView  don't work together very well.
+
+  Check the following thread for a discussion on this + possible workarounds: 
+  https://github.com/facebook/react-native/issues/10765
+
+  try this:
+  <KeyboardAvoidingView behavior={'padding'} style={{flex: 1}}>
+  {...header}
+    <ScrollView>
+      {...rows}
+    </ScrollView>
+  {...footer}
+</KeyboardAvoidingView >
+
+---
+
+2) USE KEYBOARD API FOR CONFIGURING KEYBOARD BEHAVIOR TO CLOSE WHEN USER PRESSES OUTSIDE OF IT:
+
+https://facebook.github.io/react-native/docs/keyboard
+
+-To make the keyboard disappear when user presses somewhere else on the screen, use static dismiss() method
+-Use TouchableWithoutFeedback component with this since you don't want to have effects on the screen for the press
+
+Wrap the parts of your view outside of the keyboard in TouchableWithoutFeedback and make onPress reference the 
+Keyboard.dismiss method.
+
+Note: don't wrap <KeyboardAvoidingView> in the touchable or it will cause it to break.
+
+Ex:
+ <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+   ...Only one child here
+ </TouchableWithoutFeedback>
+
+
+ ====================
+
+ USING MAPS:
+
+ -React-Native-Maps by AirBNB: https://github.com/react-native-community/react-native-maps/blob/master/docs/installation.md
+ (this requires a billing acct with Google) Alternative: MAPBOX for React-Native: https://www.mapbox.com/help/first-steps-react-native-sdk/
+
+ *Follow the instructions in the docs for setup
+
+ Note: Replace the implementation project(':react-native-maps') line in android/app/build.gradle with the blocked
+       for importing Google Play services.
+         (example: implementation(project(':react-native-maps')){
+                    exclude group: 'com.google.android.gms', module: 'play-services-base'
+                    exclude group: 'com.google.android.gms', module: 'play-services-maps'
+                    }
+                    implementation 'com.google.android.gms:play-services-base:10.0.1'
+                    implementation 'com.google.android.gms:play-services-maps:10.0.1')
+
+Create an API Key for Google Maps: search for Google Maps Android API Key and create a new project to generate 
+a key.  
+
+-Make sure to copy the Meta tag from the docs into your AndroidManifest.xml file at the bottom or top level of the 
+<Application> wrapper (maybe next to <activity>) and paste in your api key.
+
+Ex:
+   <application>
+      <activity android:name="com.facebook.react.devsupport.DevSettingsActivity" />
+      <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="Your Google maps API Key Here"/>
+    </application>
+
+    -You'll need to install open Gapps on Genymotion - start the emulator and click the open GApps button at the top 
+     right of the phone emulator window.
+
+
+===================
+
+REACT-NATIVE-IMAGE-PICKER
+
+Docs: https://github.com/react-native-community/react-native-image-picker
+
+-This library creates a menu to access local photo library or take a new photo.
+
+install:
+
+$ npm install --save react-native-image-picker
+
+Follow instructions here: 
+https://github.com/react-native-community/react-native-image-picker/blob/master/docs/Install.md
+
+In newer Android SDKs (>23), you actually need to ask for permission from within the app - 
+otherwise trying to access the camera will crash the app.
+
+The react-native-image-picker library will hopefully soon be updated to also cover this case and automatically 
+request permissions (see: https://github.com/react-community/react-native-image-picker/issues/581).
+
+Until this is done, you can add the following code to your project as a temporary workaround (if you're
+ facing issues): https://gist.github.com/pvanliefland/92046b17444a8760475e7cc0dae4fec7
+
+Add this code in a file which you add to your project and then import the adjusted ImagePicker 
+from that file and use it in your app.
+
+-Use builtin ImagePicker.showImagePicker to show the alert to choose an image menu:
+
+-use builtin props on response in second arg to check if user canceled the selection or if there was an error:
+
+Example handler:
+  pickImageHandler = () => {
+      // builtin method with react-native-image-picker library to show menu to pick an image from photo lib
+      ImagePicker.showImagePicker(
+        {title: "Pick an Image"},
+        // second arg is response from selection
+        res => {
+          // used props exposed by the library to check for cases to handle:
+          if (res.didCancel) {
+            console.log("User Cancelled.");
+          } else if (res.error) {
+            console.log("Error", res.error);
+          } else {
+            // <Image> component expects a uri property passed into source prop.  Set this so when it pulls from 
+            // state it gets what it expects.
+            this.setState({
+              pickedImage: {
+                uri: res.uri,
+                base64: res.data
+              }
+            });
+          }
+        }
+      );
+    };
+
+    <Button title="pick image" onPress={this.pickImageHandler} />
+
+(See PickImage.js)
+
+**On the res object you can access the image via res.uri or as a Base 64 encoded string (string representation 
+of the image) which can be used to send it over the wire and store it on a server for example on res.data.
+
+Note: you can improve performance if you don't need this option and set noData=true in the first arg object passed
+in to ImagePicker.showImpagePicker({ title: "pick image", noData: true }, ...)
+
+
+================
+
+HTTP REQUESTS WITH REACT-NATIVE:
+
+-Can use Fetch API or library like axios.  fetch and XMLHttpRequest are supported by RN.
+
+USING THE FETCH API:
+
+fetch("<url endpoint>"); <-- get request
+fetch("<url endpoint>", {
+  method: "POST",
+  body: JSON.stringify({...Data}) <-- body must be JSON string
+})
+.catch(err => console.log(err))
+.then(res => res.json()) <-- need to get data from response with .json()
+.catch(err => {
+  // catches 4xx and 5xx errors as well when at end of chain
+})
+
+**IMPORTANT: Catch blocks at the top will only catch failed network requests and not 4xx or 5xx errors!???
+
+handling 4xx and 5xx errors (safer way checking ok property on returned responses using fetch):
+https://www.tjvantoll.com/2015/09/13/fetch-and-errors/
+
+function handleErrors(response) {
+    if (!response.ok) {
+        throw Error(response.statusText);
+    }
+    return response;
+}
+
+fetch("http://httpstat.us/500")
+    .then(handleErrors)
+    .then(function(response) {
+        console.log("ok");
+    }).catch(function(error) {
+        console.log(error);
+    });
+
+
+
+*You need to add a catch block at the end of the chain to catch 4xx and 5xx errors!
+
+----
+
+UPLOADING FILES AND STORING IN DATABASE:
+
+1) POST HTTP Request to endpoint on back end which passes base64 string representation of file, or file data.
+2) Endpoint handler sends file data to a bucket or file storage system (use Node's fs module)
+3) Url for the file generated (use uuid for unique filenames) and used in second request to Database endpoint  
+   To store the URL in the database for accessing file on the front end.
+
+
+----------
+
+GOOGLE CLOUD FUNCTIONS TO STORE FILES WITH FIREBASE:
+
+-Storage Javascript SDK does not currently work well with React-Native.  You can use cloud functions to access 
+storage API in the function and store uploaded images, files, etc.
+
+CLOUD FUNCTION SETUP:
+
+1) Install firebase tools globally:
+npm install -g firebase-tools
+
+// firebase-tools is a CLI and just makes it easy to write and deploy a cloud function.
+
+2) In project root folder, run:
+$ firebase init
+
+// this asks you what you want to use. select option Functions with arrow keys and hit space to check it. 
+then hit enter.
+
+Follow prompts - choose project, options and install npm dependencies.
+A firebase.json and firebase.rc file is created.
+
+A functions folder is created.  You can write cloud functions in the index.js file.
+
+3) install the storage SDK:
+npm install @google-cloud/storage
+
+// update to latest npm with npm install -g npm to solve errors
+
+4) install cors package:
+npm install --save cors
+
+
+Example cloud function to store files:
+
+
+const functions = require("firebase-functions");
+const cors = require("cors")({ origin: true });
+const fs = require("fs");
+const UUID = require("uuid-v4");
+ 
+const gcconfig = {
+  projectId: "YOUR_PROJECT_ID",
+  keyFilename: "awesome-places.json"
+};
+ 
+const gcs = require("@google-cloud/storage")(gcconfig);
+ 
+// // Create and Deploy Your First Cloud Functions
+// // https://firebase.google.com/docs/functions/write-firebase-functions
+//
+exports.storeImage = functions.https.onRequest((request, response) => {
+  return cors(request, response, () => {
+    const body = JSON.parse(request.body);
+    fs.writeFileSync("/tmp/uploaded-image.jpg", body.image, "base64", err => {
+      console.log(err);
+      return response.status(500).json({ error: err });
+    });
+    const bucket = gcs.bucket("YOUR_PROJECT_ID.appspot.com");
+    const uuid = UUID();
+ 
+    return bucket.upload(
+      "/tmp/uploaded-image.jpg",
+      {
+        uploadType: "media",
+        destination: "/places/" + uuid + ".jpg",
+        metadata: {
+          metadata: {
+            contentType: "image/jpeg",
+            firebaseStorageDownloadTokens: uuid
+          }
+        }
+      },
+      (err, file) => {
+        if (!err) {
+          return response.status(201).json({
+            imageUrl:
+              "https://firebasestorage.googleapis.com/v0/b/" +
+              bucket.name +
+              "/o/" +
+              encodeURIComponent(file.name) +
+              "?alt=media&token=" +
+              uuid
+          });
+        } else {
+          console.log(err);
+          return response.status(500).json({ error: err });
+        }
+      }
+    );
+  });
