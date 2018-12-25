@@ -24,3 +24,4 @@ refactor things and remove comments to make the code clean, but I left them in f
   - Refresh tokens
 - AsyncStorage API for storing tokens for use with auto sign in on app re-launch
 - Redirecting user to different tabs
+- Clear files from Google Cloud Storage with cloud function and database triggers
