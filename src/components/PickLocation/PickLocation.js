@@ -21,6 +21,21 @@ class PickLocation extends Component {
     locationChosen: false // only show marker if user picks a location
   };
 
+  reset = () => {
+    this.setState({
+      focusedLocation: {
+        latitude: 37.7900352,
+        longitude: -122.4013726,
+        latitudeDelta: 0.0122,
+        longitudeDelta: 
+          Dimensions.get("window").width / 
+          Dimensions.get("window").height * 
+          0.0122
+      },
+      locationChosen: false 
+    });
+  };
+
   pickLocationHandler = (event) => {
     // react-native-maps provides event data in nativeEvent prop
     const coords = event.nativeEvent.coorindate;
@@ -83,15 +98,18 @@ class PickLocation extends Component {
       marker = <MapView.Marker coordinate={this.state.focusedLocation}/>
     }
 
+    const { focusedLocation, locationChosen } = this.state;
+
     return (
       <View style={styles.container}>
         <View style={styles.placeholder}>
         <MapView 
           // takes object describing what part of the world to view:
-          initialRegion={this.state.focusedLocation}
+          initialRegion={focusedLocation}
           // initialRegion only set once - region will be updated with state changes
           // You don't need this if using animate methods in the handler - the map will be moved via those. left for reference
-          //region={this.state.focusedLocation}
+          // this is used here though when reset is called on sharedplace parent, the map will update back to original position - it won't do it otherwise since initialRegion only fires once
+          region={ !locationChosen ? focusedLocation : null } // condition to keep animation working, setting region breaks animation.  null will make region be ignored
           style={styles.map}
           // returns lat long coordinate
           onPress={this.pickLocationHandler}

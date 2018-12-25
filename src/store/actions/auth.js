@@ -127,7 +127,7 @@ export const authGetToken = () => {
             const now = new Date();
             if (parsedExpiration > now) {
               // set it in redux if not expired
-              dispatch(authSetToken(fetchedToken));
+              dispatch(authSetToken(fetchedToken, expiration));
               resolve(fetchedToken);
             } else {
               reject();
@@ -159,7 +159,13 @@ export const authGetToken = () => {
               body: "grant_type=refresh_token&refresh_token=" + refreshToken
             })
           })
-          .then(res => res.json())
+          .then(res => {
+            if (res.ok) {
+              return res.json();
+            } else {
+              throw (new Error());
+            }
+          })
           .then(parsedRes => {
             const { id_token, expires_in, refresh_token } = parsedRes;
             // the new id token will be on the id_token prop from refresh token req response

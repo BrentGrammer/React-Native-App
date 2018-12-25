@@ -1,5 +1,8 @@
 ## React-Native app built following Udemy course from [This course by Max Schwarzmueller](https://www.udemy.com/react-native-the-practical-guide/)
 
+Please Note: the code is very verbose and the purpose for building this is to learn React-Native.  I would normally
+refactor things and remove comments to make the code clean, but I left them in for reference.  
+
 ### Topics covered:
 
 - React-Native-Navigation (Single Page and Tab based apps)
@@ -20,3 +23,4 @@
   - Getting and setting auth tokens
   - Refresh tokens
 - AsyncStorage API for storing tokens for use with auto sign in on app re-launch
+- Redirecting user to different tabs

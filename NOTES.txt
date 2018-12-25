@@ -56,6 +56,9 @@ Navigation:
 
 -Use react-native-navigation package.
 
+NOTE: Navigating back to a tab after visiting does NOT trigger componentDidMount() lifecycle method!  
+Need to keep this in mind so you know that logic in this method will not run again on revisiting the tab
+
 -Views that are used in navigation are called screens and are in the screens folder.  They are container components.
 
 ***React-native-navigation maintains a stack of pages for every app you start.
@@ -615,6 +618,16 @@ Note: you can improve performance if you don't need this option and set noData=t
 in to ImagePicker.showImpagePicker({ title: "pick image", noData: true }, ...)
 
 
+Restricting width and height of images:
+
+-You can provide a max height and width restriction to ImagePicker.showImagePicker() in the config obj passed in
+which will reduce the size of the image if larger than those
+
+***This speeds up upload time:
+
+ImagePicker.showImagePicker({ title: "Pick an image", maxWidth: 800, maxHeight: 600 })
+
+
 ================
 
 HTTP REQUESTS WITH REACT-NATIVE:
@@ -733,6 +746,7 @@ exports.storeImage = functions.https.onRequest((request, response) => {
     const bucket = gcs.bucket("YOUR_PROJECT_ID.appspot.com");
     const uuid = UUID();
  
+    // make sure to return this so that the cloud function knows when the promise is done - otherwise it could time out early.
     return bucket.upload(
       "/tmp/uploaded-image.jpg",
       {
@@ -849,7 +863,20 @@ render() {
 
   -A catch will not be thrown if the response from Firebase has an error. 
   -You need to check the .error prop on the response
+  -using fetch, you need to check res.ok prop and throw an error if it's falsey - this will trigger the next possible catch block
   -error object on firebase response will have message prop you can use and status codes to check as well.
+
+  Ex: 
+
+  .then(res => {
+      if (res.ok) {
+        return res.json();
+      } else {
+        throw (new Error());
+      }
+    })
+
+    .. place catch block at the end of the promise chain which will now catch 400 and 500 errors as well.
 
   4) Set up auth tokens and rules in Firebase:
      -Go to Firebase console->Database->Rules and change read and write rules.
@@ -1370,7 +1397,8 @@ OVERVIEW OF AUTH
 
 Create actions:
 
- -main action
+ -main auth action- makes request to auth endpoint and stores the token (in both redux and async storage)
+   -store token action - bundles storing token data in redux and in async storage
 
  -action to get token from redux store first or async storage if not found.  This action is dispatched inside an auto sign in action
   whcih can be dispatched in componentDidMount in main auth screen to sign user in and start main tabs app if valid token
@@ -1474,4 +1502,74 @@ export const authGetToken = () => {
 
   };
 };
+
+
+=============================
+
+RESETTING PAGES, CLEARING FORMS ETC ON SUBMIT/BUTTON PRESS:
+
+1) create reset method which sets state to the initial state
+
+2) If you need to reset child components from a parent, assign a ref to it with a ref prop and then access the child's reset
+   method attached to the ref.
+
+   in child component define the reset by setting state to it's initial state (copy and paste if necessary).
+
+   In parent, add ref on child to access reset for it:
+
+    <PickImage onImagePicked={this.imagePickedHandler} ref={ref => this.imagePicker = ref}/>
+
+  Call it in the parent attached to the ref:
+
+    this.imagePicker.reset();
+
+
+==================
+
+USING FIREBASE TRIGGERS IN CLOUD FUNCTIONS TO DELETE STORAGE ITEMS:
+
+Docs:
+https://firebase.google.com/docs/functions/database-events
+
+-These triggers occur when something changes in the database.
+
+Hook triggers include:
+onWrite(), which triggers when data is created, updated, or deleted in the Realtime Database.
+onCreate(), which triggers when new data is created in the Realtime Database.
+onUpdate(), which triggers when data is updated in the Realtime Database.
+onDelete(), which triggers when data is deleted from the Realtime Database.
+
+-in the response from uploading file to storage, inlcude a path to the file to send back to the client to use when deleting
+a place so it can be referenced to also delete the image file in storage.
+Make sure to store the filePath with the entry data in redux for referencing when dispatching the store action on the response
+on the front end.
+
+Ex:
+in response set prop to the destination of the file:
+imagePath: "/places/" + uuid + ".jpg"
+
+on front end set this in the store with the entry in redux
+
+-You can use the firebase triggers to delete the file in the storage bucket when a corresponding item in the database is deleted:
+
+exports.deleteImage = functions.database.ref("/places/{placeId}").onDelete(snapshot => {
+  const placeData = snapshot.val();
+  const imagePath = placeData.imagePath;
+
+  // get the name of the bucket by going to firebase project page->Storage->Get Started-> click Got it.
+  // The name of the bucket to pass in is in the url after gs:// (i.e. gs://<Name To copy without gs://>)
+  const bucket = googleCloudStorage.bucket("react-practice-app-55aac.appspot.com");
+
+  // delete the file - pass in the path and then the function returns a promise:
+  // make sure to return this so that the cloud function knows when the promise is done - otherwise it could time out early.
+  return bucket.file(imagePath).delete()
+    .then(res => {
+      // ...send res if successful
+    })
+    .catch(err => {
+      console.log(err);
+      // handle errors etc. send res
+    });
+})
+
 

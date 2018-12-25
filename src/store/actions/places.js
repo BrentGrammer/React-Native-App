@@ -1,5 +1,10 @@
-import { SET_PLACES, REMOVE_PLACE } from './actionTypes';
+import { SET_PLACES, REMOVE_PLACE, PLACE_ADDED, START_ADD_PLACE } from './actionTypes';
 import { uiStartLoading, uiStopLoading, authGetToken } from './index';
+
+// resets redux placeadded flag to false (used for redirecting user on SharePlace.js)
+export const startAddPlace = () => ({
+  type: START_ADD_PLACE
+});
 
 export const addPlace = (placeName, location, image) => {
   return dispatch => {
@@ -29,12 +34,20 @@ export const addPlace = (placeName, location, image) => {
       })
  
     /** UPLOAD FILE TO STORAGE using Cloud function in functions/index.js **/
-    .then(res => res.json())
+    .then(res => {
+      if (res.ok) {
+        return res.json();
+      } else {
+        throw (new Error());
+      }
+    })
     .then(parsedRes => {
       const placeData = {
         name: placeName,
         location,
-        image: parsedImage.imageUrl // prop generated on response in backend in functions/index.js cloud function.
+        image: parsedImage.imageUrl, // prop generated on response in backend in functions/index.js cloud function.
+        // get the path from response to reference for deleting the image file from storage when needed
+        imagePath: parsedRes.imagePath
       };
       /** Now store data on the database **/
       // return fetch call to store the data in the firebase so you can chain more blocks at top level
@@ -44,10 +57,18 @@ export const addPlace = (placeName, location, image) => {
         body: JSON.stringify(placeData)
       });
     })
-    .then(res => res.json())
+    .then(res => {
+      if (res.ok) {
+        return res.json();
+      } else {
+        throw (new Error());
+      }
+    })
     .then(parsedRes => {
       console.log(parsedRes);
       dispatch(uiStopLoading());
+      // sets placeAdded flag in redux to true for using with redirecting user on SharePlace.js
+      dispatch(placeAdded());
     })
     .catch(err => {
       // add catch block at end of the chain to catch 4xx and 5xx in addition to network missing errs??
@@ -58,6 +79,11 @@ export const addPlace = (placeName, location, image) => {
     });
   };
 };
+
+// sets placeAdded flag in store whenever user is done adding a place - used to check and redirect user to different tab
+export const placeAdded = () => ({
+  type: PLACE_ADDED
+});
 
 /** Get places from database and store them in redux store 
  * Called when Find Places component mounts which will retrieve the list from database in componentDidMount
@@ -72,7 +98,13 @@ export const getPlaces = () => {
       .catch(err => {
         alert("No valid token found.");
       })
-      .then(res => res.json())
+      .then(res => {
+        if (res.ok) {
+          return res.json();
+        } else {
+          throw (new Error());
+        }
+      })
       .then(parsedRes => {
         //convert object returned from firebase to array
         const places = [];
@@ -118,7 +150,13 @@ export const deletePlace = (key) => {
       .catch(err => {
         alert("No valid token found.");
       })
-      .then(res => res.json())
+      .then(res => {
+        if (res.ok) {
+          return res.json();
+        } else {
+          throw (new Error());
+        }
+      })
       .then(parsedRes => {
         console.log("Deteled.")
       })

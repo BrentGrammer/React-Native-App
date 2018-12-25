@@ -8,10 +8,22 @@ class PickImage extends Component {
     pickedImage: null
   };
 
+  // clears image in state and is used by SharePlace parent to clear image on submit (via a ref)
+  reset = () => {
+    this.setState({
+      pickedImage: null
+    })
+  }
+
   pickImageHandler = () => {
     // builtin method with react-native-image-picker library to show menu to pick an image from photo lib
+    // you can pass in ht/width restrictions as well in pixels which will reduce the size of the image if larger than those
+    // This ppeds up upload time
     ImagePicker.showImagePicker(
-      {title: "Pick an Image"},
+      { title: "Pick an Image", 
+        maxWidth: 800, 
+        maxHeight: 600 
+      },
       // second arg is response from selection
       res => {
         // used props exposed by the library to check for cases to handle:

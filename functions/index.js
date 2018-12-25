@@ -83,13 +83,14 @@ exports.storeImage = functions.https.onRequest((request, response) => {
         // in the database:
         if (!err) {
           return response.status(201).json({
-            // firebase storage has a format you follow to get the link to the file:
+            // firebase storage has a format for the link to the file - build it here to return to the client:
             imageUrl: "https://firebasestorage.googleapis.com/v0/b/" +
               bucket.name +
               "/o/" +
               encodeURIComponent(file.name) +
               "?alt=media&token=" +
-              uuid
+              uuid,
+            imagePath: "/places/" + uuid + ".jpg" // from destination in bucket.upload() - used to associate delete request to clear entry in storage
           });
         } else {
           console.log(err);
@@ -103,3 +104,26 @@ exports.storeImage = functions.https.onRequest((request, response) => {
     });
  });
 });
+
+
+// set up a trigger using the database helper to listen for delete changes on the database and delete a corresponding file in storage.
+// not the placeId in curly braces is a dynamic variable
+exports.deleteImage = functions.database.ref("/places/{placeId}").onDelete(snapshot => {
+  const placeData = snapshot.val();
+  const imagePath = placeData.imagePath;
+
+  // get the name of the bucket by going to firebase project page->Storage->Get Started-> click Got it.
+  // The name of the bucket to pass in is in the url after gs:// (i.e. gs://<Name To copy without gs://>)
+  const bucket = googleCloudStorage.bucket("react-practice-app-55aac.appspot.com");
+
+  // delete the file - pass in the path and then the function returns a promise:
+  // make sure to return this so that the cloud function knows when the promise is done - otherwise it could time out early.
+  return bucket.file(imagePath).delete()
+    .then(res => {
+      // ...send res if successful
+    })
+    .catch(err => {
+      console.log(err);
+      // handle errors etc. send res
+    });
+})

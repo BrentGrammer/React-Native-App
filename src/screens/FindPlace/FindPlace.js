@@ -23,14 +23,15 @@ class FindPlaceScreen extends Component {
     this.props.navigator.setOnNavigatorEvent(this.onNavigatorEvent)
   }
 
-  componentDidMount() {
-    // This pulls places list from the database and stores the list in the store for rendering
-    this.props.onLoadPlaces();
-  }
-
   // listening for the NavBarButtonPress event will be an object with type and id onit.
   // the id needs to be assigned to the button to handle it in startMainTabs.js setup - add an id prop to the buttons. 
   onNavigatorEvent = (event) => {
+      // check these events to reset the store flag for redirecting if user revisits tab to reload the places list
+      // this is done here because componentDidMount only fires once and component is not destroyed when user navigates to 
+      // a different tab.   
+      if (event.type === "ScreenChangedEvent" && event.id === "WillAppear") {
+        this.props.onLoadPlaces();
+      }
     if (event.type === 'NavBarButtonPress' && event.id === 'sideDrawerToggle') {
       this.props.navigator.toggleDrawer({
         side: "left" // need to set to left to avoid errors on android.
