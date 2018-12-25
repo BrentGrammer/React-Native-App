@@ -10,16 +10,17 @@ import {
   Dimensions,
   KeyboardAvoidingView,  // helper component that pushes view up when keyboard is pulled up.
   Keyboard, // API for closing keyboard when pulled up by clicking outside of it
-  TouchableWithoutFeedback 
+  TouchableWithoutFeedback,
+  ActivityIndicator 
 } from 'react-native';
-import startMainTabs from '../MainTabs/startMainTabs';
+// import startMainTabs from '../MainTabs/startMainTabs'; this is now done in the auth action creators
 import DefaultInput from '../../components/UI/DefaultInput/DefaultInput';
 import HeadingText from '../../components/UI/HeadingText/HeadingText';
 import MainText from '../../components/UI/MainText/MainText';
 import backgroundImage from '../../assets/background.jpg';
 import ButtonWithBackground from '../../components/UI/ButtonWithBackground/ButtonWithBackground';
 import validate from "../../utility/validation";
-import { tryAuth } from "../../store/actions/index";
+import { tryAuth, authAutoSignin } from "../../store/actions/index";
 
 class AuthScreen extends Component {
 
@@ -64,6 +65,12 @@ class AuthScreen extends Component {
     Dimensions.removeEventListener("change", this.updateStyles);
   }
 
+  componentDidMount() {
+    // this checks for token in async storage and sets it in store if app is closed and relaunches.  It will start main tabs app
+    // if token is found and valid.
+    this.props.onAutoSignin();
+  }
+
   switchAuthModeHandler = () => {
     //toggle login/signup text on top switch button:
     this.setState(prevState => {
@@ -79,14 +86,15 @@ class AuthScreen extends Component {
     });
   }
 
-  loginHandler = () => {
+  authHandler = () => {
     const authData = {
       email: this.state.controls.email.value,
       password: this.state.controls.password.value
     };
-    this.props.onLogin(authData);
+    // pass in a second arg which is a string to indicate handling a signup or login auth operation
+    this.props.onTryAuth(authData, this.state.authMode);
     // changes the navigation to tab based after login and replaces the current singlepage based navigation:
-    startMainTabs();
+    //startMainTabs(); -now done in auth action generators
   };
 
   // the key represents the property in the controls object in state (email, password, etc.)
@@ -143,6 +151,23 @@ class AuthScreen extends Component {
     let confirmPasswordControl = null;
     const { email, password, confirmPassword } = this.state.controls;
 
+    let submitButton = (
+      <ButtonWithBackground 
+            color="#29aaf4" 
+            onPress={this.authHandler}
+            disabled={
+              !email.valid || 
+              !password.valid || 
+              !confirmPassword.valid && this.state.authMode === "signup" // field is only present on signup form
+            }
+          >
+            Submit
+          </ButtonWithBackground>
+    );
+
+    if (this.props.isLoading) {
+      submitButton = <ActivityIndicator />
+    }
     // conditionally render the heading text if the device is not rotated.
     if (this.state.viewMode === "portrait") {
       headingText = (
@@ -240,17 +265,7 @@ class AuthScreen extends Component {
               </View>
             </View>
           </TouchableWithoutFeedback>
-          <ButtonWithBackground 
-            color="#29aaf4" 
-            onPress={this.loginHandler}
-            disabled={
-              !email.valid || 
-              !password.valid || 
-              !confirmPassword.valid && this.state.authMode === "signup" // field is only present on signup form
-            }
-          >
-            Submit
-          </ButtonWithBackground>
+          {submitButton}
         </KeyboardAvoidingView>
       </ImageBackground>
     );
@@ -290,8 +305,13 @@ const styles = StyleSheet.create({
   }
 });
 
-const mapDispatchToProps = dispatch => ({
-  onLogin: authData => dispatch(tryAuth(authData))
+const mapStateToProps = state => ({
+  isLoading: state.ui.isLoading
 });
 
-export default connect(null, mapDispatchToProps)(AuthScreen);
+const mapDispatchToProps = dispatch => ({
+  onTryAuth: (authData, authMode) => dispatch(tryAuth(authData, authMode)),
+  onAutoSignin: () => dispatch(authAutoSignin())
+});
+
+export default connect(mapStateToProps, mapDispatchToProps)(AuthScreen);

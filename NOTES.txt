@@ -636,6 +636,9 @@ fetch("<url endpoint>", {
 
 **IMPORTANT: Catch blocks at the top will only catch failed network requests and not 4xx or 5xx errors!???
 
+then()-catch()-then() makes sense if you have code you want to execute after catching an error - 
+that is a scenario where it is of course find to use that pattern.
+
 handling 4xx and 5xx errors (safer way checking ok property on returned responses using fetch):
 https://www.tjvantoll.com/2015/09/13/fetch-and-errors/
 
@@ -643,7 +646,7 @@ function handleErrors(response) {
     if (!response.ok) {
         throw Error(response.statusText);
     }
-    return response;
+    return response.json();
 }
 
 fetch("http://httpstat.us/500")
@@ -760,3 +763,430 @@ exports.storeImage = functions.https.onRequest((request, response) => {
       }
     );
   });
+
+  ====================
+
+  CREATING LOADING SPINNERS WITH ACTIVITY INDICATOR:
+
+  -use react-native ActivityIndicator component (import it)
+  -create a let to hold the component that changes when LOADING
+  -connect component to state to check loading and overwrite let with ActivityIndicator if true
+  -render the let value in the component
+
+render() {
+  let submitButton = (
+    <ButtonWithBackground>
+      Submit
+    </ButtonWithBackground>
+  );
+
+  if (this.props.isLoading) {
+    submitButton = <ActivityIndicator />
+  }
+
+  ------------------------------
+
+  AUTHENTICATION:
+
+  Backend Server:
+  - exposes two endpoints (create new user, or signin existing user)
+  - Client app sends request to either create a new user or sign an existing user in.
+
+  -The server is stateless - A session is not used in authentication with React-Native apps.
+  - Instead of a session, a JWT token is sent back from the server.  It is created in a way so that only the 
+    server can verify if it is valid or not ( you can't just copy it or fake it on the front end)
+  - This token is stored in the app in storage (AsyncStorage) and is used with a request to a protected resource.
+
+  - On the backend you need logic to create users, retrieve existing users, and create JWT tokens.
+
+  --------
+
+  USING AUTHENTICATION WITH FIREBASE:
+
+  -Firebase offers endpoints to create users, sign users in and get auth tokens.
+
+  Docs: https://firebase.google.com/docs/reference/rest/auth/
+
+  1) Go to Firebase project on firebase site and go to Authentication->Signin  Method, and enable the Email/Password method.
+
+  -This exposes endpoints which are in docs at https://firebase.google.com/docs/reference/rest/auth/#section-create-email-password
+  to sign up and create users.
+
+  Ex: 
+  Sign up user endpoint: https://www.googleapis.com/identitytoolkit/v3/relyingparty/signupNewUser?key=[API_KEY]
+  Sign in user endpoint: https://www.googleapis.com/identitytoolkit/v3/relyingparty/verifyPassword?key=[API_KEY]
+  (both take same params and content-type - only difference is the url)
+
+  -You send a body with params:
+  email	string	The email for the user to create.
+  password	string	The password for the user to create.
+  returnSecureToken	boolean	Whether or not to return an ID and refresh token. Should always be true.
+
+  * You also need to set headers in the fetch request: headers: { "Content-Type": "application/json" }
+
+
+  2) Create action generators to make auth requests.
+    -one for Signing up user 
+    -one for logging in user.
+    Note: you can use one action that just checks the signin or login state since the payload for both endpoints is the same  
+          the only thing that is different is the endpoint which you can assign to a let and check the auth mode in state
+          to determine which endpoint to send request to.
+
+  3) if response from firebase auth endpoint request has no error prop then start a tab app
+  .then(parsedRes => {
+      dispatch(uiStopLoading());
+      // errors on response will not throw catch from Firebase.  You need to check for an error prop on the response.
+      if (parsedRes.error) {
+        alert("Auth failed. Please try again.");
+      } else {
+        // start a tab app if user was created successfully in firebase
+        startMainTabs();
+      }
+    })
+
+
+  ERROR HANDLING:
+
+  -A catch will not be thrown if the response from Firebase has an error. 
+  -You need to check the .error prop on the response
+  -error object on firebase response will have message prop you can use and status codes to check as well.
+
+  4) Set up auth tokens and rules:
+     -Go to Firebase console->Database->Rules and change read and write rules.
+     -auth is a special variable provided by Firebase.  If it is null, then the user is not authenticated.
+
+    {
+      "rules": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+
+    Authenticating Rest requests to Firebase: https://firebase.google.com/docs/database/rest/auth
+
+    *You can authenticate requests by appending a auth query parameter to the endpoint which is set to the idToken
+    on the response sent.
+    Ex: https://<DATABASE_NAME>.firebaseio.com/users/ada/name.json?auth=<ID_TOKEN>
+
+    -On the response object sent back from requests to the firebase auth endpoints, you get an idToken prop.
+    -Store this idToken - for example in the redux store.
+    (create an action to store the token in the store i.e. AUTH_SET_ACTION etc.)
+
+    *The response.idToken prop (after it's parsed) should be checked, and user should not be authenticated and authorzied if
+    this value is not present.  i.e. if (!parsedRes.idToken) { throw error... } else { login and redirect, etc... }
+
+    -To get the token stored in state and use in your actions, turn the thunk async action to accept 2 params - dispatch, getState
+    Ex:
+      return (dispatch, getState) => {
+        const token = getState().auth.token;
+        // check if token is falsey and maybe throw error (not necessary here since the check occurs in authHandler before this)
+        if (!token) {
+          return;
+        }
+        ...
+
+    - use the token in protected operations in the app in the firebase url set to an auth query param
+      return fetch("https://react-practice-app-55aac.firebaseio.com/places.json?auth=" + token)
+
+      *** MORE REUSABLE WAY TO WORK WITH AUTH TOKENS:
+
+      Create an action to get the token from state and use it as a helper function.  return a promise which resolves with a 
+      valid token, or rejects otherwise.
+
+      Ex:
+        export const authGetToken = () => {
+          return (dispatch, getState) => {
+            const promise = new Promise((resolve, reject) => {
+              const token = getState().auth.token;
+              if (!token) {
+                reject();
+              } else {
+                resolve(token);
+              }
+            });
+            return promise;
+          };
+        };
+
+        -use this in other protected calls to inject the token in the action generators before the other code.
+        -place the request (fetch) inside the then block to get the token and append it to the url.
+        (remember to return the fetch call to continue in the promise chain with the response)
+
+        dispatch(authGetToken())
+          .then(token => {
+            return fetch("https://react-practice-app-55aac.firebaseio.com/places.json?auth=" + token);
+          })
+          .catch(err => {
+            alert("No valid token found.");
+          })
+          .then( ... code to run )
+  
+--
+
+AUTHENTICATING CALLS TO CLOUD FUNCTION ENDPONITS:
+
+-This is separate from Firebase auth and you need separate logic for it.  You don't append an auth query param for these
+ endpoints, instead you need to assign an Authorization header on the request and set it to "Bearer <token>", and then
+ check for it in the function code using firebase-admin helper to verify it.
+
+-Create an authorization header in the function file (i.e. functions/index.js)
+
+In the cloud funtion code at the top make checks on the authorization header which will have the token if present:
+
+exports.storeImage = functions.https.onRequest((request, response) => {
+ cors(request, response, () => {
+   // check if the header is present and if it follows standard Bearer format convention
+   if (!request.headers.authorization || request.headers.authorization.startsWith("Bearer ")) {
+     console.log("no token present.");
+     response.status(403).json({ error: "Unauthorized"});
+     // **Exit the function!
+     return;
+   }
+
+   -get the value of the token:
+     let idToken;
+    // split the header value to get the token as the second element in the returned array - 
+    // separate it from the Bearer part (remember to add the space).
+    idToken = request.headers.authorization.split("Bearer ")[1];
+
+
+CHECK VALIDITY OF THE TOKEN:
+
+*Check the validity of the token with a builtin package that comes with Firebase cloud functions:
+  // this is a built in package that you can use to verify tokens (you don't need to npm install it, it comes with firebase functions)
+  const admin = require("firebase-admin");
+
+- You need to initialize the admin helper.  pass in the json key file in the functions folder.  Make sure you require it.
+
+admin.initalizeApp({
+  credential: admin.credential.cert(require("./react-native-app.json"))
+});
+
+-verify the token with the admin helper (it is async, so pass in code to continue with into a then block.  The then block will
+  fail if the token is not verified.):
+
+  idToken = request.headers.authorization.split("Bearer ")[1];
+  
+  admin.auth().verifyIdToken(idToken)
+    .then(() => {
+      ...code to execute if token is verified...
+    })
+    .catch(err => {
+      ...handle error/log
+      response.status(403).json({ error: "Unauthorized."});
+    });
+
+*Redeploy the function with firebase deploy in the terminal
+
+
+----------
+
+STORING TOKENS IN ASYNC STORAGE:
+
+AsyncStorage Docs: https://facebook.github.io/react-native/docs/asyncstorage
+
+AsyncStorage is a helper that allows you to store key/value pairs and will automatically pick the right database system
+depending on the device it is run on (i.e. SQLite or RockDB for android)
+*Returns a promise.
+
+NOTE: for error handling, you always need to check if the value is not null in the then blocks since this will not trigger a 
+catch block to fire - catch blocks only fire for connection related errors.
+
+Async storage only accepts strings as values - make sure to parse stored values accordingly when setting or getting.
+
+-Done so user does not have to sign back in after closing the app and going back to it if they have a valid token.
+
+-You can set the expiration of a token in the response from Firebase on res.expiresIn = the value is a string in seconds.
+
+-Store the token in AsyncStorage in addition to the redux store so if the app is closed and re-opened it can be accessed 
+(since it will be cleared from the redux store at that point)
+
+Create an async thunk action generator in auth.js actions file to store token in the redux store and in async storage.
+
+1) import AsyncStorage in the actions file: import { AsyncStorage } from "react-native";
+
+2) Create action generator to dispatch setting the token in the store and also storing it with AsyncStorage.
+   This action generator dispatches a separate action for storing the token in redux
+
+Ex:
+  export const authStoreToken = token => {
+    return dispatch => {
+      dispatch(authSetToken(token));
+      // key can be any string you want, then set the token as the value in the second arg.
+      AsyncStorage.setItem("rn:auth:authToken", token);
+    };
+  };
+
+3) Getting the token from AsyncStorage:
+
+-in the action to retrieve or get the token from the store, instead of exiting or rejecting immediately on not finding a token
+, also add a check to check the AsyncStorage.
+
+Ex:
+
+  export const authGetToken = () => {
+    return (dispatch, getState) => {
+      const promise = new Promise((resolve, reject) => {
+        const token = getState().auth.token;
+        if (!token) {
+          // check async storage before rejecting totally:
+          AsyncStorage.getItem("rn:auth:authToken")
+            .catch(err => reject())
+            .then(tokenFromStorage => {
+               // need to check if null since catch will only catch timeout or connection related errors and not fire if token is null
+              if (!tokenFromStorage) {
+                reject();
+                return;
+              }
+              // set it in redux
+              dispatch(authSetToken(tokenFromStorage));
+              resolve(tokenFromStorage);
+            });
+        } else {
+          resolve(token);
+        }
+      });
+      return promise;
+    };
+  }
+
+GETTING TOKEN FROM ASYNCSTORAGE IF APP IS CLOSED:
+
+-Check for the token in the ComponentDidMount lifecycle hook on the home/login auth screen.
+(ComponentDidMount will not be executed if the user puts the app in the background and comes back to it. 
+It will be executed if the user exits the app and reloads and starts it)
+
+In componentDidMount, dispatch an action that checks for the token in AsyncStorage - if it is found, then set it in the redux store
+and redirect the user (by starting the tabs app with screens etc.)
+
+Action generator:
+
+
+export const authAutoSignin = () => {
+  return dispatch => {
+    dispatch(authGetToken())
+    .then(token => {
+      startMainTabs();
+    })
+    .catch(err => console.log("Failed to get token."))
+  };
+}
+
+in component:
+
+ componentDidMount() {
+    // this checks for token in async storage and sets it in store if app is closed and relaunches.  It will start main tabs app
+    // if token is found and valid.
+    this.props.onAutoSignin();
+  }
+
+  -----------------
+
+  SETTING AND MANAGING THE EXPIRATION OF STORED TOKENS:
+
+  -The tokens can expire making them invalid and preventing the user from accessing the app with a valid token.
+
+  -You need to store the time that the token expires using the expiresIn prop on the response sent from Firebase (which is a 
+  number string in seconds).
+
+  -In the action to store the token in AsyncStorage, pass in a second arg which is the expiresIn prop from the res.
+
+  remember to parse the date (which is a number object) to a string with .toString() since you can only store strings.
+
+  export const authStoreToken = (token, expiresIn) => {
+    return dispatch => {
+      dispatch(authSetToken(token));
+      const now = new Date();
+      const expireTime = now.getTime() + (expiresIn * 1000); // convert to millisecs
+      // key can be any string you want, then set the token as the value in the second arg.
+      AsyncStorage.setItem("rn:auth:authToken", token);
+      AsyncStorage.setItem("rn:auth:expiration", expireTime.toString());
+    };
+  };
+
+  -Now in the action to get the token from storage or redux, you need to check if the expiration date is in the future.
+  *Remember to parse the item from AsyncStorage to a date since it is stored as a string for calculations with 
+  by converting the string stored value to a number and passing it into new Date().
+  Ex:
+  ...after retrieving from async storage..
+    .then((expiration) => {
+            // parse value into a date because it is stored as a string:
+            const parsedExpiration = new Date(parseInt(expiration));
+
+  After parsing the value stored in async storage, check if it is greater than now (using new Date()), in which case it is valid ask
+  the expiration date is in the future.
+
+    .then((expiration) => {
+      // parse value into a date because it is stored as a string (convert to number and pass in to new date):
+      const parsedExpiration = new Date(parseInt(expiration));
+      const now = new Date();
+      if (parsedExpiration > now) {
+        // set it in redux if not expired
+        dispatch(authSetToken(fetchedToken));
+        resolve(fetchedToken);
+      } else {
+        reject();
+      }
+    })
+
+    Complete example:
+
+// checks for token in AsyncStorage and stores in redux store
+export const authGetToken = () => {
+  return (dispatch, getState) => {
+    const promise = new Promise((resolve, reject) => {
+      const token = getState().auth.token;
+
+      /*** THIS COMPLEX BLOCK FIRES TO CHECK ASYNC STORAGE IF NONE FOUND IN REDUX ***/
+      if (!token) {
+        // declare let to use in different then blocks
+        let fetchedToken;
+        // check async storage before rejecting totally:
+        AsyncStorage.getItem("rn:auth:authToken")
+          .catch(err => reject())
+          .then(tokenFromStorage => {
+            fetchedToken = tokenFromStorage;
+            // need to check if null since catch will only catch timeout or connection related errors and not fire if token is null
+            if (!tokenFromStorage) {
+              reject();
+              return;
+            }
+            // check the expiration date of token then:
+            return AsyncStorage.getItem("rn:auth:expiration");
+          })
+          .then((expiration) => {
+            // parse value into a date because it is stored as a string (convert to number and pass in to new date):
+            const parsedExpiration = new Date(parseInt(expiration));
+            const now = new Date();
+            if (parsedExpiration > now) {
+              // set it in redux if not expired
+              dispatch(authSetToken(fetchedToken));
+              resolve(fetchedToken);
+            } else {
+              reject();
+            }
+          })
+          .catch(err => {
+            reject();
+          });
+      } else {
+        resolve(token);
+      }
+    });
+    
+    // add a catch block to the promise before returning to handle clearing the async storage if token/values stored are invalid
+    // or expired.
+    promise.catch(err => {
+      authClearStorage();
+    });
+    return promise;
+  };
+};
+
+CLEARING STORAGE:
+
+export const authClearStorage = () => {
+    AsyncStorage.removeItem("rn:auth:authToken");
+    AsyncStorage.removeItem("rn:auth:expiration");
+};
+

@@ -16,3 +16,5 @@
 - HTTP Requests using the Fetch API
 - Persisting Data with Firebase
 - Using Google Cloud Functions to use Google Firebase Storage SDK for storing files sent through the app. 
+- Authentication in React-Native Apps using Firebase (and general token based auth flow)
+- AsyncStorage API for storing tokens and data.

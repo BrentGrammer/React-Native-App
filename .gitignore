@@ -39,7 +39,6 @@ yarn-error.log
 
 # Apikeys
 AndroidManifest.xml
-node_modules
 react-native-app.json
 
 # BUCK
