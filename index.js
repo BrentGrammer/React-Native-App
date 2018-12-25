@@ -1,5 +1,8 @@
 import App from './App';
 
+// execute as a function since it is wrapped in one in order to be re-used to sign user out:
+App();
+
 /**
  * You only need to import the App parent component on index.js and react-native-navigation will load the screens
  * registered in App.js

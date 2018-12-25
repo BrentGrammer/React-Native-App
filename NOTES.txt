@@ -851,7 +851,7 @@ render() {
   -You need to check the .error prop on the response
   -error object on firebase response will have message prop you can use and status codes to check as well.
 
-  4) Set up auth tokens and rules:
+  4) Set up auth tokens and rules in Firebase:
      -Go to Firebase console->Database->Rules and change read and write rules.
      -auth is a special variable provided by Firebase.  If it is null, then the user is not authenticated.
 
@@ -1006,7 +1006,8 @@ Create an async thunk action generator in auth.js actions file to store token in
 1) import AsyncStorage in the actions file: import { AsyncStorage } from "react-native";
 
 2) Create action generator to dispatch setting the token in the store and also storing it with AsyncStorage.
-   This action generator dispatches a separate action for storing the token in redux
+   This action generator dispatches a separate action for storing the token in redux (later in notes, see full example
+   with checking the expiration of the token and checking for a refresh token)
 
 Ex:
   export const authStoreToken = token => {
@@ -1033,7 +1034,8 @@ Ex:
           AsyncStorage.getItem("rn:auth:authToken")
             .catch(err => reject())
             .then(tokenFromStorage => {
-               // need to check if null since catch will only catch timeout or connection related errors and not fire if token is null
+               // need to check if null since catch will only catch timeout or connection related errors and not 
+               //  fire if token is null.  Remember to return out of the function
               if (!tokenFromStorage) {
                 reject();
                 return;
@@ -1050,7 +1052,7 @@ Ex:
     };
   }
 
-GETTING TOKEN FROM ASYNCSTORAGE IF APP IS CLOSED:
+GETTING TOKEN FROM ASYNCSTORAGE IF APP IS CLOSED AND RELAUNCHED:
 
 -Check for the token in the ComponentDidMount lifecycle hook on the home/login auth screen.
 (ComponentDidMount will not be executed if the user puts the app in the background and comes back to it. 
@@ -1090,19 +1092,29 @@ in component:
   number string in seconds).
 
   -In the action to store the token in AsyncStorage, pass in a second arg which is the expiresIn prop from the res.
-
+   
   remember to parse the date (which is a number object) to a string with .toString() since you can only store strings.
 
   export const authStoreToken = (token, expiresIn) => {
     return dispatch => {
-      dispatch(authSetToken(token));
       const now = new Date();
       const expireTime = now.getTime() + (expiresIn * 1000); // convert to millisecs
+      dispatch(authSetToken(token, expireTime));
       // key can be any string you want, then set the token as the value in the second arg.
       AsyncStorage.setItem("rn:auth:authToken", token);
       AsyncStorage.setItem("rn:auth:expiration", expireTime.toString());
     };
   };
+
+   Store both the token and the expiration in redux - set up the authSetToken action accordingly with expire prop to send
+    (in reducer)
+    case AUTH_SET_TOKEN:
+      return {
+        ...state,
+        token: action.token,
+        expiration: action.expiration
+      };
+
 
   -Now in the action to get the token from storage or redux, you need to check if the expiration date is in the future.
   *Remember to parse the item from AsyncStorage to a date since it is stored as a string for calculations with 
@@ -1129,7 +1141,7 @@ in component:
       }
     })
 
-    Complete example:
+    Complete example (see actions/auth.js):
 
 // checks for token in AsyncStorage and stores in redux store
 export const authGetToken = () => {
@@ -1174,19 +1186,292 @@ export const authGetToken = () => {
       }
     });
     
-    // add a catch block to the promise before returning to handle clearing the async storage if token/values stored are invalid
-    // or expired.
-    promise.catch(err => {
-      authClearStorage();
-    });
-    return promise;
-  };
-};
 
 CLEARING STORAGE:
 
 export const authClearStorage = () => {
     AsyncStorage.removeItem("rn:auth:authToken");
     AsyncStorage.removeItem("rn:auth:expiration");
+    // return this to be able to chain a then in the logout action so that it only runs after the storage is cleared to prevent
+    // a loop keeping the user logged in if storage wasn't cleared in time.
+    return AsyncStorage.removeItem("rn:auth:refreshToken");
+};
+
+// this can be used if there is no valid or null id token returned from the fallback check to get a refresh token
+
+=======================================
+
+REFRESHING THE TOKEN:
+
+docs: https://firebase.google.com/docs/reference/rest/auth/#section-refresh-token
+
+**Store the expiration of the token in redux
+ -You need to check not only if there is no token in redux before getting the token from async storage, but also if there is a token
+   and it is expired, then you can also get a refresh token
+
+   Ex in get token action:
+
+      const expiration = getState().auth.expiration;
+
+      /*** THIS COMPLEX BLOCK FIRES TO CHECK ASYNC STORAGE IF NONE FOUND IN REDUX ***/
+
+        // You need to check for null token in redux, but also that the expiration date is not valid (in the past) so that the
+        // refresh token process and async storage get token operations will fire if there is a token, but it's expired. 
+        if (!token || new Date(expiration) <= new Date()) {
+
+-The object returned from the calls to the auth endpoints provided by Firebase includes a refreshToken prop.
+
+-You can use this to get a new valid token as a fallback in cases where the current token is no longer valid.
+-Use the refreshToken to send another HTTP request to get a new valid token
+
+-Check if you have a refreshToken on the response
+
+1) Set the refreshToken value in AsyncStorage in the authStoreToken action generator:
+export const authStoreToken = (token, expiresIn, refreshToken) => {
+  return dispatch => {
+    dispatch(authSetToken(token));
+    const now = new Date();
+    const expireTime = now.getTime() + (expiresIn * 1000); 
+    AsyncStorage.setItem("rn:auth:authToken", token);
+    AsyncStorage.setItem("rn:auth:expiration", expireTime.toString());
+
+    AsyncStorage.setItem("rn:auth:refreshToken", refreshToken);
+  };
+};
+
+2) Use the refresh token to get another valid token by sending a request to a firebase endpoint:
+  Method: POST
+  Content-Type: application/x-www-form-urlencoded
+  Endpoint
+  https://securetoken.googleapis.com/v1/token?key=[API_KEY]
+
+  In the get Token action, add a request to get a new token with the refresh token in catch block if token from storage
+  is invalid, then send request with the refresh token to get a new valid token:
+
+return promise
+      .catch(err => {
+        // return this block so that the .then block to check token is not run before this finishes.
+        return AsyncStorage.getItem("rn:auth:refreshToken")
+          .then(refreshToken => {
+            // make req using the refreshtoken to get a new valid token:
+            return fetch("https://securetoken.googleapis.com/v1/token?key=" + API_KEY, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              // note that the body must be in encoded form format and not json
+              body: "grant_type=refresh_token&refresh_token=" + refreshToken
+            })
+          })
+          .then(res => res.json())
+          .then(parsedRes => {
+            const { id_token, expires_in, refresh_token } = parsedRes;
+            // the new id token will be on the id_token prop from refresh token req response
+            if (id_token) {
+              // store the new token and data received:
+              dispatch(authStoreToken(id_token, expires_in, refresh_token));
+              // return the token so that authAutoSignin can use it and pass it on to the next block to check if null or valid
+              return id_token;
+            } else {
+              authClearStorage();
+            }
+          });
+    })
+    .then(token => {
+      // this ensures that the catch block in authAutoSignin will fire if the token is null or invalid
+      if (!token) {
+        throw new Error();
+      } else {
+        // return valid token for authAutoSignin to use
+        return token;
+      }
+    });
+
+  };
+};
+
+
+============
+
+LOGGING USER OUT:
+
+-Create a handler that dispatches an action which clears AsyncStorage and removes token from redux store
+
+1) export as a function the call that started the single page app in App.js so that you can recall it to start that app when 
+user logs out.
+
+Ex in App.js:
+  export default () => {
+      Navigation.startSingleScreenApp({
+        screen: {
+          screen: "my-app.AuthScreen", // <-- the unique string id assigned to the screen to use
+          title: "Login" // <-- title displays in the navbar automatically added by the library
+        }
+      });
+  }
+
+2) in index.js where you import the app, call it since it is now wrapped in a function:
+
+Ex in index.js:
+  import App from './App';
+
+  // execute as a function since it is wrapped in one in order to be re-used to sign user out:
+  App();
+
+3) in the auth actions file import the app call to start the single page app for the login screen:
+import App from "../../../App";
+
+4) Use it to call the auth screen to load after async storage is cleared in the main logout action:
+
+export const authLogout = () => {
+  return dispatch => {
+    authClearStorage()
+      .then(() => {
+        // only call the auth screen app to load after storage is cleared (make sure to return AsyncStorage call in it's action to enable chaining)
+        // execute the imported wrapped call to start a single page app from App.js for the auth screen when user signs out:
+        App();
+      });
+    dispatch(authRemoveToken());
+  };
+};
+
+5) Make action generator to remove auth token from store
+  export const authRemoveToken = () => {
+    return {
+      type: AUTH_REMOVE_TOKEN
+    };
+  };
+
+  In reducer just set it to null:
+      case AUTH_REMOVE_TOKEN: 
+      return {
+        ...state,
+        token: null,
+        expiration: null
+      };
+
+6) import the authLogout action into the component with sign out button and connect it to redux store with mapDispatchToProps.
+   dispatch the logout action in the signout component when signout button is pressed:
+
+    (Ex from sideDrawer.js:)
+   <TouchableOpacity onPress={this.props.onLogout}>
+
+   *Remember to pass store, Provider to screen registration for connecting to redux in App.js
+     Ex using React-native-navigation: 
+      Navigation.registerComponent("my-app.SideDrawerScreen", () => SideDrawerScreen, store, Provider);
+
+
+
+
+
+=============
+
+OVERVIEW OF AUTH
+
+Create actions:
+
+ -main action
+
+ -action to get token from redux store first or async storage if not found.  This action is dispatched inside an auto sign in action
+  whcih can be dispatched in componentDidMount in main auth screen to sign user in and start main tabs app if valid token
+  and in other actions that require it to send with a protected request
+
+-action to set token in redux store and in AsyncStorage.  This action generator calls and dispatches a separate action to \
+ store it in the redux store
+
+------
+
+ Complete example of get token action:
+// checks for token in AsyncStorage and stores in redux store on app re-launch for example
+export const authGetToken = () => {
+  return (dispatch, getState) => {
+    const promise = new Promise((resolve, reject) => {
+      // retrieve from redux store first:
+      const token = getState().auth.token;
+      const expiration = getState().auth.expiration;
+
+      /*** THIS COMPLEX BLOCK FIRES TO CHECK ASYNC STORAGE IF NONE FOUND IN REDUX ***/
+
+      // You need to check for null token in redux, but also that the expiration date is not valid (in the past) so that the
+      // refresh token process and async storage get token operations will fire if there is a token, but it's expired. 
+      if (!token || new Date(expiration) <= new Date()) {
+        // declare let to use in different then blocks
+        let fetchedToken;
+        // check async storage before rejecting totally:
+        AsyncStorage.getItem("rn:auth:authToken")
+          .catch(err => reject())
+          .then(tokenFromStorage => {
+            fetchedToken = tokenFromStorage;
+            // need to check if null since catch will only catch timeout or connection related errors and not fire if token is null
+            if (!tokenFromStorage) {
+              reject();
+              return;
+            }
+            // check the expiration date of token then:
+            return AsyncStorage.getItem("rn:auth:expiration");
+          })
+          .then((expiration) => {
+            // parse value into a date because it is stored as a string (convert to number and pass in to new date):
+            const parsedExpiration = new Date(parseInt(expiration));
+            const now = new Date();
+            if (parsedExpiration > now) {
+              // set it in redux if not expired
+              dispatch(authSetToken(fetchedToken));
+              resolve(fetchedToken);
+            } else {
+              reject();
+            }
+          })
+          .catch(err => {
+            //this will fire the promise.catch block to request a refresh token
+            reject();
+          });
+      } else {
+        resolve(token);
+      }
+    });
+
+    // add a catch block to the promise before returning to handle clearing the async storage if token/values stored are invalid
+    // or expired and to use a refresh token to get a new valid token.
+    return promise
+      .catch(err => {
+        // return this block so that the .then block to check token is not run before this finishes.
+        return AsyncStorage.getItem("rn:auth:refreshToken")
+          .then(refreshToken => {
+            // make req using the refreshtoken to get a new valid token:
+            return fetch("https://securetoken.googleapis.com/v1/token?key=" + API_KEY, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              // note that the body must be in encoded form format and not json
+              body: "grant_type=refresh_token&refresh_token=" + refreshToken
+            })
+          })
+          .then(res => res.json())
+          .then(parsedRes => {
+            const { id_token, expires_in, refresh_token } = parsedRes;
+            // the new id token will be on the id_token prop from refresh token req response
+            if (id_token) {
+              // store the new token and data received:
+              dispatch(authStoreToken(id_token, expires_in, refresh_token));
+              // return the token so that authAutoSignin can use it and pass it on to the next block to check if null or valid
+              return id_token;
+            } else {
+              authClearStorage();
+            }
+          });
+    })
+    .then(token => {
+      // this ensures that the catch block in authAutoSignin will fire if the token is null or invalid
+      if (!token) {
+        throw new Error();
+      } else {
+        // return valid token for authAutoSignin to use
+        return token;
+      }
+    });
+
+  };
 };
 

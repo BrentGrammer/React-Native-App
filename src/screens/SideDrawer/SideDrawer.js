@@ -1,7 +1,9 @@
 import React, { Component } from 'react';
+import { connect } from 'react-redux';
 // NOTE: Dimensions helper that allows you to dynamically find out the dimensions of the device the program is running on.
 import { View, Text, Dimensions, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { authLogout }  from "../../store/actions/index";
 
 /**
  * Note: there is a bug in android where you need to explicitly set the width of the drawer to make it work.
@@ -17,7 +19,7 @@ class SideDrawer extends Component {
       // to combine styles you can pass an array of styles
       // note - the dimensions calculation is left inline to dynamically calculate if device is rotated.
       <View style={[styles.container, { width: Dimensions.get("window").width * 0.8 }]}> 
-        <TouchableOpacity>
+        <TouchableOpacity onPress={this.props.onLogout}>
           <View style={styles.drawerItem}>
             <Icon 
               name={Platform.OS === "android" ? "md-log-out" : "ios-log-out"} size={30} 
@@ -49,6 +51,8 @@ const styles = StyleSheet.create({
   }
 });
 
+const mapDispatchToProps = dispatch => ({
+  onLogout: () => dispatch(authLogout())
+});
 
-
-export default SideDrawer;
+export default connect(null, mapDispatchToProps)(SideDrawer);

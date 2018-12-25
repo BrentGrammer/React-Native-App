@@ -17,7 +17,7 @@ Navigation.registerComponent("my-app.AuthScreen", () => AuthScreen, store, Provi
 Navigation.registerComponent("my-app.SharePlaceScreen", () => SharePlaceScreen, store, Provider);
 Navigation.registerComponent("my-app.FindPlaceScreen", () => FindPlaceScreen, store, Provider);
 Navigation.registerComponent("my-app.PlaceDetailScreen", () => PlaceDetailScreen, store, Provider);
-Navigation.registerComponent("my-app.SideDrawerScreen", () => SideDrawerScreen);
+Navigation.registerComponent("my-app.SideDrawerScreen", () => SideDrawerScreen, store, Provider);
 
 /*** START AN APP ***/
 // Can have tab based app for screen with tabs or single screen app for a login screen etc.
@@ -26,12 +26,14 @@ Navigation.registerComponent("my-app.SideDrawerScreen", () => SideDrawerScreen);
 
 // docs: https://github.com/wix/react-native-navigation/blob/v1/docs/top-level-api.md
 // You need to provide options for config and need a screen property
-Navigation.startSingleScreenApp({
-  screen: {
-    screen: "my-app.AuthScreen", // <-- the unique string id assigned to the screen to use
-    title: "Login" // <-- title displays in the navbar automatically added by the library
-  }
-});
+export default () => {
+    Navigation.startSingleScreenApp({
+      screen: {
+        screen: "my-app.AuthScreen", // <-- the unique string id assigned to the screen to use
+        title: "Login" // <-- title displays in the navbar automatically added by the library
+      }
+    });
+}
 
 
 
