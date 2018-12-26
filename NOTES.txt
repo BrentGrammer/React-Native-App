@@ -58,6 +58,7 @@ Navigation:
 
 NOTE: Navigating back to a tab after visiting does NOT trigger componentDidMount() lifecycle method!  
 Need to keep this in mind so you know that logic in this method will not run again on revisiting the tab
+-Use componentDidUpdate for listening to props to run logic (such as redirects etc) conditionally
 
 -Views that are used in navigation are called screens and are in the screens folder.  They are container components.
 
